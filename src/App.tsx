@@ -1,50 +1,48 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+interface ImageData {
+  base64: string;
+  file_name: string;
+}
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+function App() {
+  const [imageData, setImageData] = useState<ImageData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadImage = async () => {
+      try {
+        // WSL環境内でのパスに修正
+        const path = "/home/wsluser/temp-image/plugin-viewers-image/LeavingColorfulColorado.png";
+        const data = await invoke<ImageData>("load_image", { path });
+        setImageData(data);
+        setError(null);
+      } catch (err) {
+        setError(err as string);
+        console.error("Failed to load image:", err);
+      }
+    };
+
+    loadImage();
+  }, []);
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vitejs.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://reactjs.org" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <div className="container">
+      <h1>Image Viewer</h1>
+      {error && <div style={{ color: "red" }}>{error}</div>}
+      {imageData && (
+        <div>
+          <h2>{imageData.file_name}</h2>
+          <img 
+            src={`data:image/png;base64,${imageData.base64}`}
+            alt={imageData.file_name}
+            style={{ maxWidth: "100%", height: "auto" }}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 

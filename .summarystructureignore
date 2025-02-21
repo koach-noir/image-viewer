@@ -1,0 +1,75 @@
+# Rust build artifacts
+target/**
+**/target/**
+src-tauri/target/**
+**/*.rs.bk
+**/Cargo.lock
+
+src-tauri/Cargo.lock
+
+# Generated schemas and configurations
+src-tauri/gen/**
+**/gen/schemas/**
+
+# Node.js/Frontend related
+node_modules/
+dist/
+.tauri/
+out/
+
+# Development environment
+.cargo/
+.vscode/
+.idea/
+.vs/
+**/*.pdb
+**/*.exp
+**/*.lib
+**/*.dll
+**/*.dylib
+**/*.so
+**/*.swp
+.DS_Store
+
+# Debug and log files
+**/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build and cache directories
+.cache/
+.temp/
+.vite/
+build/
+**/debug/
+**/release/
+**/incremental/
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Generated files
+**/*.wasm
+**/*.map
+**/dist-electron/
+**/release/
+**/*.min.js
+**/*.min.css
+
+# Project specific
+.git/
+.gitignore
+.github/
+.github/**
+README.md
+LICENSE
+CHANGELOG.md
+**/*.md
+/.summaryignore
+/.summarystructureignore
+**/Trash/*.*
+**/Trash/
+**/Trash/**
