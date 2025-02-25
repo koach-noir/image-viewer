@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 image-viewer_project_summary.md
 image-viewer_project_summary copy.md
+.dev/*.*

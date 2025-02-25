@@ -54,5 +54,6 @@ design/Reference Technical Articles/*.*
 **/Trash/*.*
 **/Trash/
 **/Trash/**
-public\*.svg
-src\assets\*.svg
+public/*.svg
+src/assets/*.svg
+.dev/*.*

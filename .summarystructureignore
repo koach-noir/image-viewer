@@ -22,6 +22,7 @@ out/
 .vscode/
 .idea/
 .vs/
+.dev/*.*
 **/*.pdb
 **/*.exp
 **/*.lib
