@@ -62,8 +62,6 @@ pnpm-lock.yaml
 # Project specific
 .git/
 .gitignore
-.github/
-.github/**
 README.md
 LICENSE
 CHANGELOG.md

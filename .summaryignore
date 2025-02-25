@@ -36,7 +36,7 @@ yarn-error.log*
 .env
 .env.local
 .env.development.local
-.env.test.local
+.env.test.loca
 .env.production.local
 
 # Generated or binary files
@@ -54,3 +54,5 @@ design/Reference Technical Articles/*.*
 **/Trash/*.*
 **/Trash/
 **/Trash/**
+public\*.svg
+src\assets\*.svg

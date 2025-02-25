@@ -52,7 +52,7 @@ def generate_project_summary(project_dir):
     gitignore_patterns = read_gitignore(project_dir)
     summaryignore_patterns = read_summaryignore(project_dir)
     structureignore_patterns = read_structureignore(project_dir)
-    additional_ignore_patterns = ['generate_project_summary.py', '.summaryignore', '.summarystructureignore', f'{project_name}_project_summary.md', '.git']
+    additional_ignore_patterns = ['generate_project_summary.py', '.summaryignore', '.summarystructureignore', f'{project_name}_project_summary.md', f'{project_name}_project_summary copy.md', '.git']
 
     file_contents_section = "\n## File Contents\n\n"
 
