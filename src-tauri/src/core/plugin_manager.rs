@@ -6,6 +6,7 @@ use serde_json::Value as JsonValue;
 
 use crate::core::event_bus::EventBus;
 use crate::plugins::plugin_trait::Plugin;
+use crate::core::plugin_context::PluginContext; // 共通のPluginContextをインポート
 
 /// プラグインの状態
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,53 +23,6 @@ pub enum PluginState {
     Error,
 }
 
-/// プラグインコンテキスト - プラグインに提供される機能
-pub struct PluginContext {
-    /// イベントバス
-    pub event_bus: Arc<EventBus>,
-    /// 共有データストア
-    pub shared_data: Arc<Mutex<HashMap<String, Box<dyn Any + Send + Sync>>>>,
-}
-
-impl PluginContext {
-    /// 新しいPluginContextインスタンスを作成
-    pub fn new(event_bus: Arc<EventBus>) -> Self {
-        Self {
-            event_bus,
-            shared_data: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-
-    /// 共有データを設定
-    pub fn set_shared_data<T: 'static + Send + Sync>(&self, key: &str, value: T) -> Result<(), String> {
-        match self.shared_data.lock() {
-            Ok(mut data) => {
-                data.insert(key.to_string(), Box::new(value));
-                Ok(())
-            },
-            Err(e) => Err(format!("Failed to lock shared data: {}", e)),
-        }
-    }
-
-    /// 共有データを取得
-    pub fn get_shared_data<T: 'static + Clone>(&self, key: &str) -> Result<Option<T>, String> {
-        match self.shared_data.lock() {
-            Ok(data) => {
-                if let Some(value) = data.get(key) {
-                    if let Some(typed_value) = value.downcast_ref::<T>() {
-                        Ok(Some(typed_value.clone()))
-                    } else {
-                        Err(format!("Type mismatch for key: {}", key))
-                    }
-                } else {
-                    Ok(None)
-                }
-            },
-            Err(e) => Err(format!("Failed to lock shared data: {}", e)),
-        }
-    }
-}
-
 /// プラグイン登録情報
 struct PluginRegistration {
     /// プラグインインスタンス
@@ -77,6 +31,8 @@ struct PluginRegistration {
     state: PluginState,
     /// エラーメッセージ（あれば）
     error: Option<String>,
+    /// プラグインの依存関係
+    dependencies: Vec<String>,
 }
 
 /// プラグインマネージャークラス
@@ -112,11 +68,15 @@ impl PluginManager {
                     return Err(format!("Plugin with ID '{}' is already registered", plugin_id));
                 }
                 
+                // 依存関係の抽出
+                let dependencies = Vec::new(); // 将来的に拡張
+                
                 // 登録
                 plugins.insert(plugin_id.clone(), PluginRegistration {
                     plugin,
                     state: PluginState::Registered,
                     error: None,
+                    dependencies,
                 });
                 
                 // イベント発行
@@ -132,302 +92,319 @@ impl PluginManager {
 
     /// プラグインを初期化
     pub fn initialize_plugin(&self, plugin_id: &str) -> Result<(), String> {
-        let mut plugin_instance = {
-            match self.plugins.lock() {
-                Ok(mut plugins) => {
-                    if let Some(registration) = plugins.get_mut(plugin_id) {
-                        if registration.state != PluginState::Registered {
-                            return Err(format!("Plugin '{}' is not in a registerable state", plugin_id));
-                        }
-                        
-                        &mut registration.plugin
-                    } else {
-                        return Err(format!("Plugin with ID '{}' not found", plugin_id));
-                    }
+        // 依存関係の確認と初期化
+        let dependencies = {
+            let plugins = self.plugins.lock().map_err(|e| {
+                format!("Failed to lock plugins registry: {}", e)
+            })?;
+            
+            let entry = plugins.get(plugin_id).ok_or_else(|| {
+                format!("Plugin with ID '{}' not found", plugin_id)
+            })?;
+            
+            entry.dependencies.clone()
+        };
+        
+        // 依存関係を先に初期化
+        for dep_id in &dependencies {
+            if let Err(e) = self.initialize_plugin(dep_id) {
+                return Err(format!("Failed to initialize dependency {}: {}", dep_id, e));
+            }
+        }
+        
+        // プラグインの状態チェック
+        let plugin_state = self.get_plugin_state(plugin_id)?;
+        if plugin_state != PluginState::Registered {
+            // 既に初期化済みの場合は成功
+            if plugin_state == PluginState::Initialized || 
+               plugin_state == PluginState::Active {
+                return Ok(());
+            }
+            // エラー状態の場合
+            if plugin_state == PluginState::Error {
+                return Err(format!("Plugin '{}' is in error state", plugin_id));
+            }
+        }
+        
+        // プラグインの初期化
+        let result = {
+            let mut plugins = self.plugins.lock().map_err(|e| {
+                format!("Failed to lock plugins registry for writing: {}", e)
+            })?;
+            
+            let entry = plugins.get_mut(plugin_id).ok_or_else(|| {
+                format!("Plugin with ID '{}' not found", plugin_id)
+            })?;
+            
+            let plugin_instance = &mut entry.plugin;
+            
+            // 初期化処理
+            match plugin_instance.initialize(Arc::clone(&self.context)) {
+                Ok(()) => {
+                    entry.state = PluginState::Initialized;
+                    entry.error = None;
+                    Ok(())
                 },
-                Err(e) => return Err(format!("Failed to lock plugins: {}", e)),
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    entry.state = PluginState::Error;
+                    entry.error = Some(error_msg.clone());
+                    Err(format!("Failed to initialize plugin {}: {}", plugin_id, error_msg))
+                }
             }
         };
         
-        // プラグインを初期化
-        match plugin_instance.initialize(Arc::clone(&self.context)) {
-            Ok(_) => {
-                // 状態を更新
-                if let Ok(mut plugins) = self.plugins.lock() {
-                    if let Some(registration) = plugins.get_mut(plugin_id) {
-                        registration.state = PluginState::Initialized;
-                        registration.error = None;
-                    }
-                }
-                
-                // イベント発行
-                self.event_bus.publish("plugin:initialized", serde_json::json!({
-                    "plugin_id": plugin_id
-                }))?;
-                
-                Ok(())
-            },
-            Err(e) => {
-                // エラー状態を更新
-                if let Ok(mut plugins) = self.plugins.lock() {
-                    if let Some(registration) = plugins.get_mut(plugin_id) {
-                        registration.state = PluginState::Error;
-                        registration.error = Some(e.clone());
-                    }
-                }
-                
-                // エラーイベント発行
-                self.event_bus.publish("plugin:error", serde_json::json!({
-                    "plugin_id": plugin_id,
-                    "error": e.clone(),
-                    "operation": "initialize"
-                }))?;
-                
-                Err(e)
-            }
+        // 結果に基づいてイベント発行
+        if result.is_ok() {
+            self.event_bus.publish("plugin:initialized", serde_json::json!({
+                "plugin_id": plugin_id,
+            }))?;
+            log::info!("Plugin initialized: {}", plugin_id);
+        } else {
+            self.event_bus.publish("plugin:error", serde_json::json!({
+                "plugin_id": plugin_id,
+                "error": result.as_ref().err().unwrap(),
+                "operation": "initialize",
+            }))?;
+            log::error!("Failed to initialize plugin {}: {}", plugin_id, result.as_ref().err().unwrap());
         }
+        
+        result
     }
 
     /// プラグインを有効化
     pub fn activate_plugin(&self, plugin_id: &str) -> Result<(), String> {
-        let mut plugin_instance = {
-            match self.plugins.lock() {
-                Ok(mut plugins) => {
-                    if let Some(registration) = plugins.get_mut(plugin_id) {
-                        // 初期化されていなければ初期化
-                        if registration.state == PluginState::Registered {
-                            drop(plugins); // ロックを解放
-                            self.initialize_plugin(plugin_id)?;
-                            if let Ok(plugins) = self.plugins.lock() {
-                                &mut plugins.get_mut(plugin_id).unwrap().plugin
-                            } else {
-                                return Err("Failed to lock plugins after initialization".to_string());
-                            }
-                        } else if registration.state == PluginState::Active {
-                            return Ok(()); // 既に有効化済み
-                        } else if registration.state == PluginState::Error {
-                            return Err(format!("Cannot activate plugin in error state: {}", 
-                                              registration.error.as_ref().unwrap_or(&"Unknown error".to_string())));
-                        } else {
-                            &mut registration.plugin
-                        }
-                    } else {
-                        return Err(format!("Plugin with ID '{}' not found", plugin_id));
-                    }
+        // プラグインの状態をチェック
+        let plugin_state = self.get_plugin_state(plugin_id)?;
+        
+        // 既に有効化されている場合は何もしない
+        if plugin_state == PluginState::Active {
+            return Ok(());
+        }
+        
+        // エラー状態の場合は有効化できない
+        if plugin_state == PluginState::Error {
+            let error = match self.get_plugin_error(plugin_id)? {
+                Some(err) => err,
+                None => "Unknown error".to_string(),
+            };
+            return Err(format!("Cannot activate plugin {} due to error: {}", plugin_id, error));
+        }
+        
+        // 初期化されていない場合は初期化
+        if plugin_state == PluginState::Registered {
+            self.initialize_plugin(plugin_id)?;
+        }
+        
+        // プラグインを有効化
+        let result = {
+            let mut plugins = self.plugins.lock().map_err(|e| {
+                format!("Failed to lock plugins registry for writing: {}", e)
+            })?;
+            
+            let entry = plugins.get_mut(plugin_id).ok_or_else(|| {
+                format!("Plugin with ID '{}' not found", plugin_id)
+            })?;
+            
+            let plugin_instance = &mut entry.plugin;
+            
+            // 有効化処理
+            match plugin_instance.activate() {
+                Ok(()) => {
+                    entry.state = PluginState::Active;
+                    entry.error = None;
+                    Ok(())
                 },
-                Err(e) => return Err(format!("Failed to lock plugins: {}", e)),
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    entry.state = PluginState::Error;
+                    entry.error = Some(error_msg.clone());
+                    Err(format!("Failed to activate plugin {}: {}", plugin_id, error_msg))
+                }
             }
         };
         
-        // プラグインを有効化
-        match plugin_instance.activate() {
-            Ok(_) => {
-                // 状態を更新
-                if let Ok(mut plugins) = self.plugins.lock() {
-                    if let Some(registration) = plugins.get_mut(plugin_id) {
-                        registration.state = PluginState::Active;
-                        registration.error = None;
-                    }
-                }
-                
-                // イベント発行
-                self.event_bus.publish("plugin:activated", serde_json::json!({
-                    "plugin_id": plugin_id
-                }))?;
-                
-                Ok(())
-            },
-            Err(e) => {
-                // エラー状態を更新
-                if let Ok(mut plugins) = self.plugins.lock() {
-                    if let Some(registration) = plugins.get_mut(plugin_id) {
-                        registration.state = PluginState::Error;
-                        registration.error = Some(e.clone());
-                    }
-                }
-                
-                // エラーイベント発行
-                self.event_bus.publish("plugin:error", serde_json::json!({
-                    "plugin_id": plugin_id,
-                    "error": e.clone(),
-                    "operation": "activate"
-                }))?;
-                
-                Err(e)
-            }
+        // 結果に基づいてイベント発行
+        if result.is_ok() {
+            self.event_bus.publish("plugin:activated", serde_json::json!({
+                "plugin_id": plugin_id,
+            }))?;
+            log::info!("Plugin activated: {}", plugin_id);
+        } else {
+            self.event_bus.publish("plugin:error", serde_json::json!({
+                "plugin_id": plugin_id,
+                "error": result.as_ref().err().unwrap(),
+                "operation": "activate",
+            }))?;
+            log::error!("Failed to activate plugin {}: {}", plugin_id, result.as_ref().err().unwrap());
         }
+        
+        result
     }
 
     /// プラグインを無効化
     pub fn deactivate_plugin(&self, plugin_id: &str) -> Result<(), String> {
-        let mut plugin_instance = {
-            match self.plugins.lock() {
-                Ok(mut plugins) => {
-                    if let Some(registration) = plugins.get_mut(plugin_id) {
-                        if registration.state != PluginState::Active {
-                            return Ok(()); // 既に非アクティブ
-                        }
-                        &mut registration.plugin
-                    } else {
-                        return Err(format!("Plugin with ID '{}' not found", plugin_id));
-                    }
+        // プラグインの状態をチェック
+        let plugin_state = self.get_plugin_state(plugin_id)?;
+        
+        // 有効化されていない場合は何もしない
+        if plugin_state != PluginState::Active {
+            return Ok(());
+        }
+        
+        // プラグインを無効化
+        let result = {
+            let mut plugins = self.plugins.lock().map_err(|e| {
+                format!("Failed to lock plugins registry for writing: {}", e)
+            })?;
+            
+            let entry = plugins.get_mut(plugin_id).ok_or_else(|| {
+                format!("Plugin with ID '{}' not found", plugin_id)
+            })?;
+            
+            let plugin_instance = &mut entry.plugin;
+            
+            // 無効化処理
+            match plugin_instance.deactivate() {
+                Ok(()) => {
+                    entry.state = PluginState::Inactive;
+                    entry.error = None;
+                    Ok(())
                 },
-                Err(e) => return Err(format!("Failed to lock plugins: {}", e)),
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    entry.state = PluginState::Error;
+                    entry.error = Some(error_msg.clone());
+                    Err(format!("Failed to deactivate plugin {}: {}", plugin_id, error_msg))
+                }
             }
         };
         
-        // プラグインを無効化
-        match plugin_instance.deactivate() {
-            Ok(_) => {
-                // 状態を更新
-                if let Ok(mut plugins) = self.plugins.lock() {
-                    if let Some(registration) = plugins.get_mut(plugin_id) {
-                        registration.state = PluginState::Inactive;
-                        registration.error = None;
-                    }
-                }
-                
-                // イベント発行
-                self.event_bus.publish("plugin:deactivated", serde_json::json!({
-                    "plugin_id": plugin_id
-                }))?;
-                
-                Ok(())
-            },
-            Err(e) => {
-                // エラー状態を更新
-                if let Ok(mut plugins) = self.plugins.lock() {
-                    if let Some(registration) = plugins.get_mut(plugin_id) {
-                        registration.state = PluginState::Error;
-                        registration.error = Some(e.clone());
-                    }
-                }
-                
-                // エラーイベント発行
-                self.event_bus.publish("plugin:error", serde_json::json!({
-                    "plugin_id": plugin_id,
-                    "error": e.clone(),
-                    "operation": "deactivate"
-                }))?;
-                
-                Err(e)
-            }
+        // 結果に基づいてイベント発行
+        if result.is_ok() {
+            self.event_bus.publish("plugin:deactivated", serde_json::json!({
+                "plugin_id": plugin_id,
+            }))?;
+            log::info!("Plugin deactivated: {}", plugin_id);
+        } else {
+            self.event_bus.publish("plugin:error", serde_json::json!({
+                "plugin_id": plugin_id,
+                "error": result.as_ref().err().unwrap(),
+                "operation": "deactivate",
+            }))?;
+            log::error!("Failed to deactivate plugin {}: {}", plugin_id, result.as_ref().err().unwrap());
         }
+        
+        result
     }
 
     /// プラグインを登録解除
     pub fn unregister_plugin(&self, plugin_id: &str) -> Result<(), String> {
         // アクティブなら先に無効化
-        {
-            let plugin_state = self.get_plugin_state(plugin_id)?;
-            if plugin_state == PluginState::Active {
-                self.deactivate_plugin(plugin_id)?;
-            }
+        let plugin_state = self.get_plugin_state(plugin_id)?;
+        if plugin_state == PluginState::Active {
+            self.deactivate_plugin(plugin_id)?;
         }
         
         // 登録解除
-        match self.plugins.lock() {
-            Ok(mut plugins) => {
-                if plugins.remove(plugin_id).is_some() {
-                    // イベント発行
-                    self.event_bus.publish("plugin:unregistered", serde_json::json!({
-                        "plugin_id": plugin_id
-                    }))?;
-                    
-                    Ok(())
-                } else {
-                    Err(format!("Plugin with ID '{}' not found", plugin_id))
-                }
-            },
-            Err(e) => Err(format!("Failed to lock plugins: {}", e)),
+        let mut plugins = self.plugins.lock().map_err(|e| {
+            format!("Failed to lock plugins registry for writing: {}", e)
+        })?;
+        
+        if plugins.remove(plugin_id).is_some() {
+            // イベント発行
+            drop(plugins); // ロックを解放
+            self.event_bus.publish("plugin:unregistered", serde_json::json!({
+                "plugin_id": plugin_id,
+            }))?;
+            
+            log::info!("Plugin unregistered: {}", plugin_id);
+            Ok(())
+        } else {
+            Err(format!("Plugin with ID '{}' not found", plugin_id))
         }
     }
 
     /// プラグインの状態を取得
     pub fn get_plugin_state(&self, plugin_id: &str) -> Result<PluginState, String> {
-        match self.plugins.lock() {
-            Ok(plugins) => {
-                if let Some(registration) = plugins.get(plugin_id) {
-                    Ok(registration.state)
-                } else {
-                    Err(format!("Plugin with ID '{}' not found", plugin_id))
-                }
-            },
-            Err(e) => Err(format!("Failed to lock plugins: {}", e)),
-        }
+        let plugins = self.plugins.lock().map_err(|e| {
+            format!("Failed to lock plugins registry: {}", e)
+        })?;
+        
+        let entry = plugins.get(plugin_id).ok_or_else(|| {
+            format!("Plugin with ID '{}' not found", plugin_id)
+        })?;
+        
+        Ok(entry.state)
     }
 
     /// プラグインのエラーメッセージを取得
     pub fn get_plugin_error(&self, plugin_id: &str) -> Result<Option<String>, String> {
-        match self.plugins.lock() {
-            Ok(plugins) => {
-                if let Some(registration) = plugins.get(plugin_id) {
-                    Ok(registration.error.clone())
-                } else {
-                    Err(format!("Plugin with ID '{}' not found", plugin_id))
-                }
-            },
-            Err(e) => Err(format!("Failed to lock plugins: {}", e)),
-        }
+        let plugins = self.plugins.lock().map_err(|e| {
+            format!("Failed to lock plugins registry: {}", e)
+        })?;
+        
+        let entry = plugins.get(plugin_id).ok_or_else(|| {
+            format!("Plugin with ID '{}' not found", plugin_id)
+        })?;
+        
+        Ok(entry.error.clone())
     }
 
     /// 登録済みの全プラグインIDを取得
     pub fn get_all_plugin_ids(&self) -> Result<Vec<String>, String> {
-        match self.plugins.lock() {
-            Ok(plugins) => {
-                Ok(plugins.keys().cloned().collect())
-            },
-            Err(e) => Err(format!("Failed to lock plugins: {}", e)),
-        }
+        let plugins = self.plugins.lock().map_err(|e| {
+            format!("Failed to lock plugins registry: {}", e)
+        })?;
+        
+        Ok(plugins.keys().cloned().collect())
+    }
+    
+    /// プラグイン数を取得
+    pub fn get_plugin_count(&self) -> Result<usize, String> {
+        let plugins = self.plugins.lock().map_err(|e| {
+            format!("Failed to lock plugins registry: {}", e)
+        })?;
+        
+        Ok(plugins.len())
     }
 
     /// アクティブな全プラグインIDを取得
     pub fn get_active_plugin_ids(&self) -> Result<Vec<String>, String> {
-        match self.plugins.lock() {
-            Ok(plugins) => {
-                Ok(plugins.iter()
-                    .filter(|(_, reg)| reg.state == PluginState::Active)
-                    .map(|(id, _)| id.clone())
-                    .collect())
-            },
-            Err(e) => Err(format!("Failed to lock plugins: {}", e)),
-        }
+        let plugins = self.plugins.lock().map_err(|e| {
+            format!("Failed to lock plugins registry: {}", e)
+        })?;
+        
+        Ok(plugins.iter()
+            .filter(|(_, reg)| reg.state == PluginState::Active)
+            .map(|(id, _)| id.clone())
+            .collect())
     }
 
     /// プラグインの設定を取得
     pub fn get_plugin_config(&self, plugin_id: &str) -> Result<JsonValue, String> {
-        let plugin_instance = {
-            match self.plugins.lock() {
-                Ok(plugins) => {
-                    if let Some(registration) = plugins.get(plugin_id) {
-                        registration.plugin.as_ref()
-                    } else {
-                        return Err(format!("Plugin with ID '{}' not found", plugin_id));
-                    }
-                },
-                Err(e) => return Err(format!("Failed to lock plugins: {}", e)),
-            }
-        };
+        let plugins = self.plugins.lock().map_err(|e| {
+            format!("Failed to lock plugins registry: {}", e)
+        })?;
         
-        plugin_instance.get_config()
+        let entry = plugins.get(plugin_id).ok_or_else(|| {
+            format!("Plugin with ID '{}' not found", plugin_id)
+        })?;
+        
+        entry.plugin.get_config()
     }
 
     /// プラグインの設定を更新
     pub fn update_plugin_config(&self, plugin_id: &str, config: JsonValue) -> Result<(), String> {
-        let mut plugin_instance = {
-            match self.plugins.lock() {
-                Ok(mut plugins) => {
-                    if let Some(registration) = plugins.get_mut(plugin_id) {
-                        &mut registration.plugin
-                    } else {
-                        return Err(format!("Plugin with ID '{}' not found", plugin_id));
-                    }
-                },
-                Err(e) => return Err(format!("Failed to lock plugins: {}", e)),
-            }
-        };
+        let mut plugins = self.plugins.lock().map_err(|e| {
+            format!("Failed to lock plugins registry for writing: {}", e)
+        })?;
         
-        plugin_instance.update_config(config)
+        let entry = plugins.get_mut(plugin_id).ok_or_else(|| {
+            format!("Plugin with ID '{}' not found", plugin_id)
+        })?;
+        
+        entry.plugin.update_config(config)
     }
 }
 

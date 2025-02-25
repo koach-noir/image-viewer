@@ -6,13 +6,7 @@ use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 use serde_json::Value as JsonValue;
 
-use crate::core::event_bus::EventBus;
-
-/// プラグインコンテキスト - プラグインに提供される機能
-pub struct PluginContext {
-    /// イベントバス
-    pub event_bus: Arc<EventBus>,
-}
+use crate::core::plugin_context::PluginContext; // 共通のPluginContextをインポート
 
 /// プラグイン記述子 - プラグインの基本情報
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,9 +141,7 @@ mod tests {
     #[test]
     fn test_mock_plugin() {
         let event_bus = Arc::new(EventBus::new());
-        let context = Arc::new(PluginContext {
-            event_bus,
-        });
+        let context = Arc::new(PluginContext::new(event_bus));
         
         let mut plugin = MockPlugin::new("test-plugin");
         

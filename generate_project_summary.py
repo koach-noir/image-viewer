@@ -1,26 +1,35 @@
 import os
 import fnmatch
-import chardet
 
 def is_binary(file_path):
     with open(file_path, 'rb') as file:
         return b'\0' in file.read(1024)
 
 def read_file_contents(file_path):
-    encodings = ['utf-8', 'shift_jis']
+    # List of encodings to try
+    encodings = ['utf-8', 'utf-16', 'shift_jis', 'latin-1', 'iso-8859-1']
+    
     for encoding in encodings:
         try:
             with open(file_path, 'r', encoding=encoding) as file:
                 return file.read()
-        except UnicodeDecodeError:
-            pass
-    return ''
+        except (UnicodeDecodeError, LookupError):
+            continue
+    
+    # If no encoding works, try reading as binary and decode
+    try:
+        with open(file_path, 'rb') as file:
+            raw_content = file.read()
+            # Attempt to decode with utf-8, replacing invalid characters
+            return raw_content.decode('utf-8', errors='replace')
+    except Exception:
+        return ''
 
 def is_ignored(path, project_dir, gitignore_patterns, summaryignore_patterns, structureignore_patterns, additional_ignore_patterns, check_structure=False):
     relative_path = os.path.relpath(path, project_dir)
-    relative_path = relative_path.replace('\\', '/') # Windowsパスを統一
+    relative_path = relative_path.replace('\\', '/') # Normalize Windows paths
     
-    # ディレクトリ構造チェック時は structureignore_patterns を使用
+    # Choose patterns based on check_structure
     patterns_to_check = gitignore_patterns + additional_ignore_patterns
     if check_structure:
         patterns_to_check += structureignore_patterns
@@ -28,9 +37,9 @@ def is_ignored(path, project_dir, gitignore_patterns, summaryignore_patterns, st
         patterns_to_check += summaryignore_patterns
     
     for pattern in patterns_to_check:
-        pattern = pattern.replace('\\', '/') # パターンも統一
+        pattern = pattern.replace('\\', '/') # Normalize pattern
         
-        # **をサポートするためのパターン処理
+        # Support ** wildcard
         if '**' in pattern:
             pattern = pattern.replace('**/', '')
             if pattern.startswith('/'):
@@ -61,11 +70,11 @@ def generate_project_summary(project_dir):
         indent = '  ' * level
         relative_path = os.path.relpath(root, project_dir)
         
-        # 明らかに除外すべきディレクトリを早期に除外
+        # Early exclusion of known directories to ignore
         if os.path.basename(root) in ['node_modules', '.git', 'dist']:
             return
 
-        # Directory Structure用の無視判定
+        # Check if directory should be ignored in structure
         if is_ignored(root, project_dir, gitignore_patterns, summaryignore_patterns, structureignore_patterns, additional_ignore_patterns, check_structure=True):
             return
 
@@ -74,7 +83,7 @@ def generate_project_summary(project_dir):
         subindent = '  ' * (level + 1)
         items = os.listdir(root)
         
-        # ディレクトリとファイルを分離して処理
+        # Separate directories and files
         dirs = []
         files = []
         for item in items:
@@ -84,19 +93,20 @@ def generate_project_summary(project_dir):
             else:
                 files.append(item)
 
-        # ディレクトリとファイルをそれぞれソート
+        # Process directories first
         for item in sorted(dirs):
             item_path = os.path.join(root, item)
             traverse_directory(item_path, level + 1, include_contents)
             
+        # Then process files
         for item in sorted(files):
             item_path = os.path.join(root, item)
             
-            # Directory Structure用の無視判定
+            # Check if file should be ignored in structure
             if not is_ignored(item_path, project_dir, gitignore_patterns, summaryignore_patterns, structureignore_patterns, additional_ignore_patterns, check_structure=True):
                 summary += f'{subindent}- {item}\n'
             
-            # File Contentsセクションの処理
+            # Process file contents
             if include_contents and not is_binary(item_path):
                 if not is_ignored(item_path, project_dir, gitignore_patterns, summaryignore_patterns, structureignore_patterns, additional_ignore_patterns, check_structure=False):
                     content = read_file_contents(item_path)

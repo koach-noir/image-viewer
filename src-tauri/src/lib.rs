@@ -1,8 +1,24 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use base64::{Engine as _, engine::general_purpose};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use tauri::AppHandle;
+use tauri::Manager;
+
+// コアモジュールのエクスポート
+pub mod core;
+// プラグインシステムのエクスポート
+pub mod plugins;
+// ユーティリティ関数（将来的に実装予定）
+// pub mod utils;
+
+// イベントバスとプラグインマネージャーのインスタンスを保持するグローバル状態
+struct AppState {
+    event_bus: Arc<core::event_bus::EventBus>,
+    plugin_manager: Arc<core::plugin_manager::PluginManager>,
+    resource_manager: Arc<core::resource_manager::ResourceManager>,
+}
 
 #[derive(Debug, Serialize)]
 pub struct ImageData {
@@ -72,7 +88,7 @@ async fn get_directory_images(dir_path: String) -> Result<DirectoryContent, Stri
         let entry = match entry {
             Ok(entry) => entry,
             Err(e) => {
-                println!("Warning: Failed to read directory entry: {}", e);
+                log::warn!("Failed to read directory entry: {}", e);
                 continue;
             }
         };
@@ -102,13 +118,68 @@ async fn get_directory_images(dir_path: String) -> Result<DirectoryContent, Stri
     })
 }
 
+// プラグインシステムコマンド
+#[tauri::command]
+async fn load_plugin(path: String, app_handle: AppHandle) -> Result<String, String> {
+    let state = app_handle.state::<AppState>();
+    let plugin_manager = &state.plugin_manager;
+    
+    // プラグインのロード処理（実際の実装はプラグインシステムによる）
+    log::info!("Loading plugin from path: {}", path);
+    
+    // TODO: 実際のプラグインロード処理を実装
+    
+    Ok("Plugin loaded successfully".to_string())
+}
+
+// リソース解決コマンド
+#[tauri::command]
+async fn resolve_resources(
+    config: core::resource_manager::ResourceConfig,
+    app_handle: AppHandle
+) -> Result<core::resource_manager::PathResolutionResult, String> {
+    let state = app_handle.state::<AppState>();
+    let resource_manager = &state.resource_manager;
+    
+    resource_manager.resolve_resources(config).await
+}
+
+// 画像コレクション読み込みコマンド
+#[tauri::command]
+async fn load_images_from_paths(
+    paths: Vec<String>,
+    app_handle: AppHandle
+) -> Result<core::image_collection::ImageCollection, String> {
+    let state = app_handle.state::<AppState>();
+    let resource_manager = &state.resource_manager;
+    
+    resource_manager.load_images_from_paths(paths).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // イベントバスの作成
+    let event_bus = Arc::new(core::event_bus::EventBus::new());
+    
+    // プラグインマネージャーの作成
+    let plugin_manager = Arc::new(core::plugin_manager::PluginManager::new(Arc::clone(&event_bus)));
+    
+    // リソースマネージャーの作成
+    let resource_manager = Arc::new(core::resource_manager::ResourceManager::new());
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(AppState {
+            event_bus,
+            plugin_manager,
+            resource_manager,
+        })
         .invoke_handler(tauri::generate_handler![
             load_image,
             get_directory_images,
+            load_plugin,
+            resolve_resources,
+            load_images_from_paths,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

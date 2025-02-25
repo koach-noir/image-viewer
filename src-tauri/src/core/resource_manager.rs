@@ -167,9 +167,8 @@ impl ResourceManager {
         Ok(())
     }
 
-    /// 設定に基づいてリソースを解決
-    #[tauri::command]
-    pub async fn resolve_resources(&self, config: ResourceConfig) -> Result<PathResolutionResult, String> {
+    /// 設定に基づいてリソースを内部で解決する関数
+    pub async fn internal_resolve_resources(&self, config: ResourceConfig) -> Result<PathResolutionResult, String> {
         // キャッシュに設定を保存
         if let Ok(mut cache) = self.config_cache.lock() {
             cache.insert(config.id.clone(), config.clone());
@@ -208,9 +207,8 @@ impl ResourceManager {
         })
     }
 
-    /// パスリストから画像コレクションを作成
-    #[tauri::command]
-    pub async fn load_images_from_paths(&self, paths: Vec<String>) -> Result<ImageCollection, String> {
+    /// パスリストから内部で画像コレクションを作成する関数
+    pub async fn internal_load_images_from_paths(&self, paths: Vec<String>) -> Result<ImageCollection, String> {
         let mut metadata_list = Vec::new();
         
         for path in paths {
@@ -244,9 +242,8 @@ impl ResourceManager {
         Ok(ImageCollection::new(metadata_list))
     }
 
-    /// 設定IDに基づいて画像コレクションを直接ロード
-    #[tauri::command]
-    pub async fn load_images_from_config(&self, config_id: String) -> Result<ImageCollection, String> {
+    /// 設定IDに基づいて内部で画像コレクションを直接ロードする関数
+    pub async fn internal_load_images_from_config(&self, config_id: String) -> Result<ImageCollection, String> {
         let config = {
             if let Ok(cache) = self.config_cache.lock() {
                 if let Some(config) = cache.get(&config_id) {
@@ -259,8 +256,8 @@ impl ResourceManager {
             }
         };
         
-        let result = self.resolve_resources(config).await?;
-        self.load_images_from_paths(result.paths).await
+        let result = self.internal_resolve_resources(config).await?;
+        self.internal_load_images_from_paths(result.paths).await
     }
 
     /// キャッシュをクリア
@@ -276,4 +273,24 @@ impl ResourceManager {
             cache.remove(config_id);
         }
     }
+}
+
+// 以下、Tauriコマンド関数（実装ブロックの外に移動）
+
+/// 設定に基づいてリソースを解決するTauriコマンド
+#[tauri::command]
+pub async fn resolve_resources(config: ResourceConfig, resource_manager: tauri::State<'_, Arc<ResourceManager>>) -> Result<PathResolutionResult, String> {
+    resource_manager.internal_resolve_resources(config).await
+}
+
+/// パスリストから画像コレクションを作成するTauriコマンド
+#[tauri::command]
+pub async fn load_images_from_paths(paths: Vec<String>, resource_manager: tauri::State<'_, Arc<ResourceManager>>) -> Result<ImageCollection, String> {
+    resource_manager.internal_load_images_from_paths(paths).await
+}
+
+/// 設定IDに基づいて画像コレクションを直接ロードするTauriコマンド
+#[tauri::command]
+pub async fn load_images_from_config(config_id: String, resource_manager: tauri::State<'_, Arc<ResourceManager>>) -> Result<ImageCollection, String> {
+    resource_manager.internal_load_images_from_config(config_id).await
 }

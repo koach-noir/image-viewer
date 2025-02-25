@@ -5,12 +5,14 @@ pub mod resource_manager;
 pub mod image_collection;
 pub mod plugin_manager;
 pub mod event_bus;
+pub mod plugin_context;
 
 // コアモジュールを一括でエクスポート
 pub use resource_manager::ResourceManager;
 pub use image_collection::{ImageCollection, ImageData, ImageMetadata};
 pub use plugin_manager::PluginManager;
 pub use event_bus::EventBus;
+pub use plugin_context::PluginContext;
 
 /// コアシステムの初期化
 pub fn initialize() -> Result<(), String> {
