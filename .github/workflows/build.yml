@@ -61,7 +61,8 @@ jobs:
       - name: Install Windows build tools
         run: |
           pnpm add -D @tauri-apps/cli
-          npm config set msvs_version 2022
+          # Visual Studio 2022がGitHub Actionsの環境にプリインストールされているため、
+          # npm configでmsvsバージョンを設定する必要はありません
       
       - name: Build the app
         run: pnpm tauri build
