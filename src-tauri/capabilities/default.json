@@ -6,6 +6,13 @@
   "permissions": [
     "core:default",
     "core:path:default",
-    "opener:default"
+    "opener:default",
+    {
+      "identifier": "core:path:allow-resolve-directory",
+      "allow": [
+        { "path": "$APPDATA" },
+        { "path": "$DOCUMENT" }
+      ]
+    }
   ]
 }

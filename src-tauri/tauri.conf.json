@@ -21,6 +21,11 @@
       "csp": null
     }
   },
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": true
+    }
+  },
   "bundle": {
     "active": true,
     "category": "Graphics and Design",

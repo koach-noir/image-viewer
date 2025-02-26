@@ -1,8 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
 import { appConfigDir, join } from '@tauri-apps/api/path';
-import { createDir, exists, readTextFile, writeTextFile } from '@tauri-apps/api/fs';
+// import { createDir, exists, readTextFile, writeTextFile } from '@tauri-apps/api/fs';
+// import { path } from "@tauri-apps/api";
+import { mkdir, exists, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { EventPayload } from '../core/EventSystem';
 import getEventSystem from '../core/EventSystem';
+
 
 /**
  * 設定値の型定義
@@ -118,7 +121,7 @@ export class ConfigManager {
       const dirExists = await exists(configDir);
       if (!dirExists) {
         // 設定ディレクトリが存在しない場合は作成
-        await createDir(configDir, { recursive: true });
+        await mkdir(configDir, { recursive: true });
       }
       
       // 設定ファイルが存在するか確認

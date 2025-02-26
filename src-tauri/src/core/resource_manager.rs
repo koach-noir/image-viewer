@@ -278,19 +278,16 @@ impl ResourceManager {
 // 以下、Tauriコマンド関数（実装ブロックの外に移動）
 
 /// 設定に基づいてリソースを解決するTauriコマンド
-#[tauri::command]
 pub async fn resolve_resources(config: ResourceConfig, resource_manager: tauri::State<'_, Arc<ResourceManager>>) -> Result<PathResolutionResult, String> {
     resource_manager.internal_resolve_resources(config).await
 }
 
 /// パスリストから画像コレクションを作成するTauriコマンド
-#[tauri::command]
 pub async fn load_images_from_paths(paths: Vec<String>, resource_manager: tauri::State<'_, Arc<ResourceManager>>) -> Result<ImageCollection, String> {
     resource_manager.internal_load_images_from_paths(paths).await
 }
 
 /// 設定IDに基づいて画像コレクションを直接ロードするTauriコマンド
-#[tauri::command]
 pub async fn load_images_from_config(config_id: String, resource_manager: tauri::State<'_, Arc<ResourceManager>>) -> Result<ImageCollection, String> {
     resource_manager.internal_load_images_from_config(config_id).await
 }

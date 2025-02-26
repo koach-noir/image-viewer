@@ -1,8 +1,8 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use base64::{Engine as _, engine::general_purpose};
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
 use tauri::AppHandle;
 use tauri::Manager;
 
@@ -15,8 +15,8 @@ pub mod plugins;
 
 // イベントバスとプラグインマネージャーのインスタンスを保持するグローバル状態
 struct AppState {
-    event_bus: Arc<core::event_bus::EventBus>,
-    plugin_manager: Arc<core::plugin_manager::PluginManager>,
+    // event_bus: Arc<core::event_bus::EventBus>,
+    // plugin_manager: Arc<core::plugin_manager::PluginManager>,
     resource_manager: Arc<core::resource_manager::ResourceManager>,
 }
 
@@ -120,9 +120,10 @@ async fn get_directory_images(dir_path: String) -> Result<DirectoryContent, Stri
 
 // プラグインシステムコマンド
 #[tauri::command]
-async fn load_plugin(path: String, app_handle: AppHandle) -> Result<String, String> {
-    let state = app_handle.state::<AppState>();
-    let plugin_manager = &state.plugin_manager;
+// async fn load_plugin(path: String, app_handle: AppHandle) -> Result<String, String> {
+async fn load_plugin(path: String) -> Result<String, String> {
+    // let state = app_handle.state::<AppState>();
+    // let plugin_manager = &state.plugin_manager;
     
     // プラグインのロード処理（実際の実装はプラグインシステムによる）
     log::info!("Loading plugin from path: {}", path);
@@ -141,7 +142,7 @@ async fn resolve_resources(
     let state = app_handle.state::<AppState>();
     let resource_manager = &state.resource_manager;
     
-    resource_manager.resolve_resources(config).await
+    resource_manager.internal_resolve_resources(config).await
 }
 
 // 画像コレクション読み込みコマンド
@@ -153,25 +154,26 @@ async fn load_images_from_paths(
     let state = app_handle.state::<AppState>();
     let resource_manager = &state.resource_manager;
     
-    resource_manager.load_images_from_paths(paths).await
+    resource_manager.internal_load_images_from_paths(paths).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // イベントバスの作成
-    let event_bus = Arc::new(core::event_bus::EventBus::new());
+    // let event_bus = Arc::new(core::event_bus::EventBus::new());
     
     // プラグインマネージャーの作成
-    let plugin_manager = Arc::new(core::plugin_manager::PluginManager::new(Arc::clone(&event_bus)));
+    // let plugin_manager = Arc::new(core::plugin_manager::PluginManager::new(Arc::clone(&event_bus)));
     
     // リソースマネージャーの作成
     let resource_manager = Arc::new(core::resource_manager::ResourceManager::new());
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
-            event_bus,
-            plugin_manager,
+            // event_bus,
+            // plugin_manager,
             resource_manager,
         })
         .invoke_handler(tauri::generate_handler![

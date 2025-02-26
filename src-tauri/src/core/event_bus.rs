@@ -21,12 +21,26 @@ pub struct EventPayload {
 pub type EventHandler = Box<dyn Fn(EventPayload) -> Result<(), String> + Send + Sync>;
 
 /// イベントバスの実装
-#[derive(Debug, Default)]
+// Debugデリバティブを削除
+#[derive(Default)]
 pub struct EventBus {
     /// イベントタイプごとのハンドラー
     handlers: Arc<Mutex<HashMap<String, Vec<EventHandler>>>>,
     /// コンポーネントごとのハンドラー
     component_handlers: Arc<Mutex<HashMap<String, HashMap<String, Vec<EventHandler>>>>>,
+}
+
+// 手動でDebug実装
+impl std::fmt::Debug for EventBus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let handler_count = self.handlers.lock().map(|h| h.len()).unwrap_or(0);
+        let component_count = self.component_handlers.lock().map(|c| c.len()).unwrap_or(0);
+        
+        f.debug_struct("EventBus")
+            .field("registered_event_types", &handler_count)
+            .field("registered_components", &component_count)
+            .finish()
+    }
 }
 
 impl EventBus {

@@ -4,8 +4,9 @@ use std::sync::{Arc, Mutex, RwLock};
 use thiserror::Error;
 use serde_json::Value as JsonValue;
 
+use crate::core::plugin_context::PluginContext;
 use crate::core::event_bus::EventBus;
-use crate::plugins::plugin_trait::{Plugin, PluginDescriptor, PluginContext};
+use crate::plugins::plugin_trait::{Plugin, PluginDescriptor};
 
 /// プラグインレジストリのエラー型
 #[derive(Error, Debug)]
@@ -77,6 +78,7 @@ impl PluginRegistry {
     pub fn new(event_bus: Arc<EventBus>) -> Self {
         let context = Arc::new(PluginContext {
             event_bus: Arc::clone(&event_bus),
+            shared_data: Arc::new(Mutex::new(HashMap::new())),
         });
         
         Self {
@@ -155,7 +157,7 @@ impl PluginRegistry {
         
         // 依存関係を先に初期化
         for dep_id in &dependencies {
-            if let Err(e) = self.initialize_plugin(dep_id) {
+            if let Err(_e) = self.initialize_plugin(dep_id) {
                 return Err(PluginRegistryError::DependencyNotFound(
                     dep_id.clone(),
                     plugin_id.to_string(),

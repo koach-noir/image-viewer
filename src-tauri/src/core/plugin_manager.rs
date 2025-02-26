@@ -1,7 +1,6 @@
 // plugin_manager.rs
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::any::Any;
 use serde_json::Value as JsonValue;
 
 use crate::core::event_bus::EventBus;

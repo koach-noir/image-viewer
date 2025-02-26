@@ -2,7 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::Arc;
+// use image_viewer_lib::core::{self, event_bus::EventBus, plugin_manager::PluginManager};
 use image_viewer_lib::core::{self, event_bus::EventBus, plugin_manager::PluginManager};
+// use image_viewer_lib::core::{self, event_bus::EventBus};
 use image_viewer_lib::plugins;
 
 fn main() {
@@ -19,11 +21,11 @@ fn main() {
     let event_bus = Arc::new(EventBus::new());
     
     // プラグインマネージャーの初期化
-    let plugin_manager = PluginManager::new(Arc::clone(&event_bus));
+    let _plugin_manager = PluginManager::new(Arc::clone(&event_bus));
     
     // プラグインシステムの初期化
     match plugins::initialize(Arc::clone(&event_bus)) {
-        Ok(registry) => {
+        Ok(_registry) => {
             log::info!("Plugin system initialized successfully");
             
             // 必要に応じて組み込みプラグインのロード処理をここに追加
