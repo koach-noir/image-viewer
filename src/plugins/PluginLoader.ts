@@ -1,5 +1,5 @@
 import { PluginInterface, PluginInfo, PluginContext } from './PluginInterface';
-import { invoke } from '@tauri-apps/api/core';
+// import { invoke } from '@tauri-apps/api/core';
 
 /**
  * プラグイン管理の状態
@@ -393,7 +393,7 @@ export class PluginLoader {
     // バックエンドからプラグインをロードする例を示しています。
     try {
       // バックエンドからプラグインをロード
-      const pluginData = await invoke<any>('load_external_plugin', { source });
+      // const pluginData = await invoke<any>('load_external_plugin', { source });
       
       // ここでは、プラグインのデータ構造をフロントエンドのプラグインクラスに変換
       // する処理が必要です。これはプラグインの実装方法によって異なります。

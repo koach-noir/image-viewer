@@ -25,30 +25,43 @@ on:
         - macos
         - linux
 
-jobs:
-  check-commit-message:
-    runs-on: ubuntu-latest
-    outputs:
-      should-run: ${{ steps.check.outputs.should-run }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-      - id: check
-        run: |
-          # ワークフローが手動実行された場合は常にビルドを実行
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "should-run=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          # コミットメッセージをチェック
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          if [[ "$COMMIT_MSG" == *"[build]"* ]]; then
-            echo "should-run=true" >> $GITHUB_OUTPUT
-          else
-            echo "should-run=false" >> $GITHUB_OUTPUT
-          fi
+  jobs:
+    check-commit-message:
+      runs-on: ubuntu-latest
+      outputs:
+        should-run: ${{ steps.check.outputs.should-run }}
+      steps:
+        - uses: actions/checkout@v4
+          with:
+            fetch-depth: 0  # すべてのコミット履歴をフェッチ
+        - id: check
+          run: |
+            echo "GitHub Event: ${{ github.event_name }}"
+            COMMIT_MSG=$(git log -1 --pretty=%B)
+            echo "Commit Message: $COMMIT_MSG"
+            
+            # 手動実行の場合は常に実行
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+              echo "Manual dispatch - always run"
+              echo "should-run=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            
+            # コミットメッセージをチェック（大文字小文字を区別しない）
+            if [[ "${COMMIT_MSG^^}" == *"[BUILD]"* ]]; then
+              echo "Build tag detected"
+              echo "should-run=true" >> $GITHUB_OUTPUT
+            else
+              echo "No build tag"
+              echo "should-run=false" >> $GITHUB_OUTPUT
+            fi
+            
+            # 不確定な状態の場合はデフォルトで実行
+            if [[ "${{ steps.check.outputs.should-run }}" == "" ]]; then
+              echo "Defaulting to run due to uncertain state"
+              echo "should-run=true" >> $GITHUB_OUTPUT
+            fi
+          continue-on-error: true
 
   build:
     needs: check-commit-message
@@ -143,6 +156,13 @@ jobs:
       - name: Install Tauri CLI
         run: pnpm add -D @tauri-apps/cli
       
+      - name: Show Node.js and pnpm versions
+        run: |
+          node --version
+          pnpm --version
+          cat package.json
+          cat pnpm-lock.yaml
+          
       - name: Build the app
         run: pnpm tauri build
       

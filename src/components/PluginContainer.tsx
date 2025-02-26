@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { PluginLoader, PluginState } from '../plugins/PluginLoader';
-import { PluginInterface, PluginInfo } from '../plugins/PluginInterface';
+// import { PluginInterface, PluginInfo } from '../plugins/PluginInterface';
+import { PluginInfo } from '../plugins/PluginInterface';
 
 // スタイル定義
 const styles = {

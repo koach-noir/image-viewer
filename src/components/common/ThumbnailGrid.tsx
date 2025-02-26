@@ -270,7 +270,8 @@ const ThumbnailGrid: React.FC<ThumbnailGridProps> = ({
             // ファイル名の取得
             const fileName = 'fileName' in image 
               ? image.fileName 
-              : image.file_name || 'image';
+              // : image.file_name || 'image';
+              : 'image';
             
             return (
               <div
@@ -330,3 +331,5 @@ const ThumbnailGrid: React.FC<ThumbnailGridProps> = ({
     </div>
   );
 };
+
+export default ThumbnailGrid;

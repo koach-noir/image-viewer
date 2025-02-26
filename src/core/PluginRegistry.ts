@@ -61,7 +61,7 @@ export class PluginRegistry {
   /** プラグインコンテキスト */
   private context: PluginContext;
   /** 登録済みイベントリスナー */
-  private eventListeners: Map<string, Set<Function>> = new Map();
+  // private eventListeners: Map<string, Set<Function>> = new Map();
   /** 設定 */
   private config: PluginRegistryConfig;
   /** 初期化済みフラグ */
@@ -232,7 +232,7 @@ export class PluginRegistry {
    * 依存関係を抽出
    * @param plugin プラグインインスタンス
    */
-  private extractDependencies(plugin: PluginInterface): string[] {
+  private extractDependencies(_plugin: PluginInterface): string[] {
     // 将来的に依存関係の抽出ロジックを実装
     // 現在は未実装のため空配列を返す
     return [];
@@ -277,7 +277,7 @@ export class PluginRegistry {
     
     try {
       // プラグイン設定を読み込む
-      const pluginConfig = this.configManager.getPluginConfig(pluginId);
+      // const pluginConfig = this.configManager.getPluginConfig(pluginId);
       
       // プラグインを初期化
       const success = await registration.instance.initialize(this.context);
@@ -572,7 +572,7 @@ export class PluginRegistry {
   public async loadExternalPlugin(source: string): Promise<boolean> {
     try {
       // バックエンドからプラグインをロード
-      const pluginData = await invoke<any>('load_external_plugin', { source });
+      // const pluginData = await invoke<any>('load_external_plugin', { source });
       
       // この部分は実際のプラグインのロード方法によって異なる
       // 現在はプロトタイプとして提供
