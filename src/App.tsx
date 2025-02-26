@@ -72,8 +72,7 @@ function App() {
       
       for (const pluginName of pluginNames) {
         try {
-          const PluginClass = await dynamicImportPlugin(pluginName);
-          const plugin = new PluginClass();
+          const plugin = await dynamicImportPlugin(pluginName);
           await loader.registerPlugin(plugin);
         } catch (pluginError) {
           console.error(`Failed to load plugin ${pluginName}:`, pluginError);

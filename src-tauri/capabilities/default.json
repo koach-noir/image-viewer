@@ -11,8 +11,12 @@
       "identifier": "core:path:allow-resolve-directory",
       "allow": [
         { "path": "$APPDATA" },
-        { "path": "$DOCUMENT" }
+        { "path": "$DOCUMENT" },
+        { "path": "$HOME" },
+        { "path": "$PICTURES" }
       ]
-    }
+    },
+    "fs:read-all",
+    "fs:write-all"
   ]
 }

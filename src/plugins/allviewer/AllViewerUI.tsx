@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import getEventSystem from '../../core/EventSystem';
 import { ImageData } from '../../core/ImageManager';
 import AllViewerPlugin from './AllViewerPlugin';
 import ImageViewer from '../../components/common/ImageViewer';
@@ -57,6 +58,23 @@ const AllViewerUI: React.FC = () => {
     };
 
     loadImages();
+  }, []);
+
+  useEffect(() => {
+    // 画像読み込みイベントを購読
+    const unsubscribe = getEventSystem().subscribe('allviewer:images_loaded', (data) => {
+      if (data && data.images) {
+        setImages(data.images);
+        if (data.images.length > 0) {
+          setSelectedImageIndex(0);
+        }
+      }
+    });
+    
+    return () => {
+      // クリーンアップ時にイベント購読を解除
+      unsubscribe();
+    };
   }, []);
 
   // ビューモードの切り替え

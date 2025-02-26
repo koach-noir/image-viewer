@@ -1,0 +1,10 @@
+{
+    "id": "allviewer-resources",
+    "name": "AllViewer画像リソース",
+    "filters": {
+      "include": [
+        "/Users/yutakakoach/Pictures/Photos Library.photoslibrary/originals"
+      ],
+      "exclude": []
+    }
+  }

@@ -133,6 +133,8 @@ interface PluginContainerProps {
   showPluginInfo?: boolean;
   className?: string;
   style?: React.CSSProperties;
+  onPluginChange?: (pluginId: string) => Promise<void>;
+  availablePlugins?: PluginInfo[];
 }
 
 /**
@@ -147,10 +149,12 @@ const PluginContainer: React.FC<PluginContainerProps> = ({
   showPluginInfo = true,
   className = '',
   style = {},
+  onPluginChange,
+  availablePlugins: propAvailablePlugins,
 }) => {
   // 状態管理
   const [activePluginId, setActivePluginId] = useState<string | null>(defaultPluginId || null);
-  const [availablePlugins, setAvailablePlugins] = useState<PluginInfo[]>([]);
+  const [availablePlugins, setAvailablePlugins] = useState<PluginInfo[]>(propAvailablePlugins || []);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
@@ -187,13 +191,18 @@ const PluginContainer: React.FC<PluginContainerProps> = ({
       setLoading(true);
       setError(null);
       
-      // すべてのプラグイン情報を取得
+      // propsからavailablePluginsが提供されている場合はそれを使用
+      if (propAvailablePlugins) {
+        setAvailablePlugins(propAvailablePlugins);
+      } else {
+        // 提供されていない場合は自動取得
       const plugins = pluginLoader.getAllPluginInfo();
       setAvailablePlugins(plugins);
+      }
       
       // デフォルトプラグインがなく、プラグインが存在する場合は最初のプラグインをアクティブに
-      if (!activePluginId && plugins.length > 0) {
-        setActivePluginId(plugins[0].id);
+      if (!activePluginId && availablePlugins.length > 0) {
+        setActivePluginId(availablePlugins[0].id);
       }
       
       setLoading(false);
@@ -202,7 +211,14 @@ const PluginContainer: React.FC<PluginContainerProps> = ({
       setError(`Failed to load plugins: ${err}`);
       console.error('Failed to load plugins:', err);
     }
-  }, [pluginLoader, activePluginId]);
+  }, [pluginLoader, activePluginId, propAvailablePlugins, availablePlugins.length]);
+  
+  // propAvailablePluginsが変更されたときに更新
+  useEffect(() => {
+    if (propAvailablePlugins) {
+      setAvailablePlugins(propAvailablePlugins);
+    }
+  }, [propAvailablePlugins]);
   
   // プラグインの有効化
   const activatePlugin = useCallback(async (pluginId: string) => {
@@ -233,7 +249,11 @@ const PluginContainer: React.FC<PluginContainerProps> = ({
   const handlePluginChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const pluginId = e.target.value;
     activatePlugin(pluginId);
-  }, [activatePlugin]);
+    // onPluginChangeが提供されていれば呼び出す
+    if (onPluginChange) {
+      onPluginChange(pluginId);
+    }
+  }, [activatePlugin, onPluginChange]);
   
   // 初期ロード
   useEffect(() => {
@@ -267,13 +287,27 @@ const PluginContainer: React.FC<PluginContainerProps> = ({
     if (!activePluginId) return null;
     
     const plugin = pluginLoader.getPlugin(activePluginId);
-    if (!plugin) return null;
+    if (!plugin) {
+      console.error(`Plugin ${activePluginId} not found`);
+      return null;
+    }
     
     const pluginState = pluginLoader.getPluginState(activePluginId);
-    if (pluginState !== PluginState.ACTIVE) return null;
+    console.log(`Rendering plugin: ${activePluginId}, state: ${pluginState}`);
+    
+    if (pluginState !== PluginState.ACTIVE) {
+      console.warn(`Plugin ${activePluginId} is not active, state: ${pluginState}`);
+      return null;
+    }
     
     try {
       const PluginComponent = plugin.getUIComponent();
+      console.log("Got UI component:", PluginComponent);
+      if (!PluginComponent) {
+        console.error("Plugin returned no UI component");
+        return null;
+      }
+      
       pluginComponentRef.current = <PluginComponent />;
       return pluginComponentRef.current;
     } catch (err) {

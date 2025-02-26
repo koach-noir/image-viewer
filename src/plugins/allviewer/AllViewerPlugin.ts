@@ -5,6 +5,8 @@ import AllViewerUI from './AllViewerUI';
 import ImageManager, { ImageData } from '../../core/ImageManager';
 import ConfigManager from '../../config/ConfigManager';
 import getEventSystem from '../../core/EventSystem';
+import ResourceDefinitionManager, { ResourceConfig } from '../../config/ResourceDefinition';
+
 
 // プラグインの設定型定義
 interface AllViewerConfig {
@@ -13,6 +15,12 @@ interface AllViewerConfig {
   showLabels: boolean;
   currentDirectory?: string;
 }
+
+// // リソース解決のレスポンス型を明示的に定義
+// interface ResourceResolveResponse {
+//   paths?: string[];
+//   count?: number;
+// }
 
 // APIハンドラのタイプ定義
 interface ApiHandler {
@@ -67,14 +75,28 @@ class AllViewerPlugin extends BasePlugin {
 
   async activate() {
     try {
-      // プラグインがアクティブになった際の処理
-      if (this.currentConfig.currentDirectory) {
-        await this.loadImagesFromDirectory(this.currentConfig.currentDirectory);
-      }
-      return true;
+        // リソース設定をデフォルトパスから読み込む
+        const resourceConfig: ResourceConfig = await ResourceDefinitionManager.loadResourceConfig();
+
+        // リソースからパスを解決
+        const resolvedResources = await ResourceDefinitionManager.resolveResources(resourceConfig);
+
+        // 解決されたパスから画像をロード
+        const images = await ImageManager.loadImagesFromPaths(resolvedResources);
+        
+        // 読み込んだ画像をプラグインの状態に設定
+        this.currentImages = images;
+
+        // イベントを発行して画像が読み込まれたことを通知
+        this.eventSystem.publish('allviewer:images_loaded', {
+            count: images.length,
+            resources: resolvedResources
+        });
+
+        return true;
     } catch (error) {
-      console.error('AllViewer plugin activation failed:', error);
-      return false;
+        console.error('Failed to activate AllViewer plugin:', error);
+        return false;
     }
   }
 

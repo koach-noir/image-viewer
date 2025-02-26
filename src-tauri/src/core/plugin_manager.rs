@@ -263,12 +263,12 @@ impl PluginManager {
         features.contains(&feature.to_string())
     }
     
-    /// 現在の有効なプラグインを取得
-    pub fn get_active_plugins(&self) -> Vec<Box<dyn Plugin>> {
+    /// 現在の有効なプラグインのIDを取得
+    pub fn get_active_plugin_ids(&self) -> Vec<String> {
         let plugins = self.plugins.lock().unwrap();
-        plugins.values()
-            .filter(|entry| entry.state == PluginState::Active)
-            .map(|entry| entry.plugin.clone())
+        plugins.iter()
+            .filter(|(_, entry)| entry.state == PluginState::Active)
+            .map(|(id, _)| id.clone())
             .collect()
     }
 }

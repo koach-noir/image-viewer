@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import { save, open } from "@tauri-apps/plugin-fs";
+import { exists, writeTextFile, readTextFile } from "@tauri-apps/plugin-fs";
+import { appConfigDir, join } from '@tauri-apps/api/path';
+import { mkdir } from '@tauri-apps/plugin-fs';
 
 // リソースフィルターのインターフェース
 export interface ResourceFilter {
@@ -16,8 +18,8 @@ export interface ResourceConfig {
 
 // リソース定義管理クラス
 export class ResourceDefinitionManager {
-  // 設定ファイルのデフォルト保存先
-  private static DEFAULT_CONFIG_PATH = 'resources.json';
+  // // 設定ファイルのデフォルト保存先
+  // private static DEFAULT_CONFIG_PATH = 'resources.json';
 
   /**
    * リソース設定をJSONファイルに保存
@@ -29,10 +31,18 @@ export class ResourceDefinitionManager {
     path?: string
   ): Promise<void> {
     try {
-      const savePath = path || this.DEFAULT_CONFIG_PATH;
+      // アプリ固有の設定ディレクトリを取得
+      const configDir = await appConfigDir();
+      
+      // 設定ディレクトリが存在することを確認
+      await mkdir(configDir, { recursive: true });
+      
+      // 保存パスを決定（デフォルトはアプリ設定ディレクトリ内）
+      const savePath = path || await join(configDir, 'resources.json');
+      
       const jsonContent = JSON.stringify(config, null, 2);
       
-      await save(savePath, jsonContent);
+      await writeTextFile(savePath, jsonContent);
     } catch (error) {
       console.error('Failed to save resource config:', error);
       throw new Error(`リソース設定の保存に失敗しました: ${error}`);
@@ -45,22 +55,61 @@ export class ResourceDefinitionManager {
    * @returns リソース設定
    */
   public static async loadResourceConfig(
-    path?: string
+      path?: string
   ): Promise<ResourceConfig> {
-    try {
-      const loadPath = path || this.DEFAULT_CONFIG_PATH;
-      const jsonContent = await open(loadPath, { read: true });
-      
-      const config: ResourceConfig = JSON.parse(jsonContent as string);
-      
-      // バリデーション
-      this.validateResourceConfig(config);
-      
-      return config;
-    } catch (error) {
-      console.error('Failed to load resource config:', error);
-      throw new Error(`リソース設定の読み込みに失敗しました: ${error}`);
-    }
+      try {
+          // アプリ固有の設定ディレクトリを取得
+          const configDir = await appConfigDir();
+          
+          // 保存パスを決定（デフォルトはアプリ設定ディレクトリ内）
+          const loadPath = path || await join(configDir, 'resources.json');
+          
+          // ファイルの存在を確認（オプション）
+          const fileExists = await exists(loadPath);
+          if (!fileExists) {
+              // デフォルトの設定を返すか、エラーをスローする
+              return this.createDefaultResourceConfig();
+          }
+          
+          // ファイルを読み込む
+          const jsonContent = await readTextFile(loadPath);
+          
+          // JSONをパース
+          const config: ResourceConfig = JSON.parse(jsonContent);
+          
+          // バリデーション
+          this.validateResourceConfig(config);
+          
+          return config;
+      } catch (error) {
+          console.error('Failed to load resource config:', error);
+          
+          // エラーハンドリング
+          if (error instanceof Error && error.message.includes('forbidden path')) {
+              // パス制限エラーの場合、デフォルト設定を返す
+              return this.createDefaultResourceConfig();
+          }
+          
+          throw new Error(`リソース設定の読み込みに失敗しました: ${error}`);
+      }
+  }
+  
+  // デフォルトのリソース設定を作成するヘルパーメソッド
+  private static createDefaultResourceConfig(): ResourceConfig {
+      return {
+          id: 'default-resource-config',
+          name: 'デフォルト画像リソース',
+          filters: {
+              include: [
+                  '~/Pictures',  // ユーザーの画像フォルダ
+                  '~/Documents/Images'  // ドキュメント内の画像フォルダ
+              ],
+              exclude: [
+                  '~/Pictures/Private',  // プライベートフォルダを除外
+                  '~/Documents/Images/Temp'  // 一時フォルダを除外
+              ]
+          }
+      };
   }
 
   /**
@@ -114,7 +163,7 @@ export class ResourceDefinitionManager {
     config: ResourceConfig
   ): Promise<string[]> {
     try {
-      const result = await invoke('resolve_resources', { config });
+      const result: { paths: string[] } = await invoke('resolve_resources', { config });
       return result.paths || [];
     } catch (error) {
       console.error('Failed to resolve resources:', error);
