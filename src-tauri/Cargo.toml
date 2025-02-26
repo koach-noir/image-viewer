@@ -29,6 +29,17 @@ thiserror = "1.0"
 log = "0.4"
 env_logger = "0.10"
 
+# プラグインシステム用フィーチャーフラグ
+[features]
+default = ["plugin-allviewer"]  # デフォルトはAllViewerプラグインを含む
+
+# 個別プラグインのフィーチャーフラグ
+plugin-allviewer = []  # 大量画像表示プラグイン (ALL Viewing)
+plugin-findme = []     # 画像探しゲームプラグイン (FindMe)
+
+# 複数プラグイン組み合わせ用の便利フィーチャー
+all-plugins = ["plugin-allviewer", "plugin-findme"]  # すべてのプラグインを含む
+
 [package.metadata.bundle]
 osx_minimum_system_version = "10.14"
 osx_architectures = ["x86_64", "aarch64"]
